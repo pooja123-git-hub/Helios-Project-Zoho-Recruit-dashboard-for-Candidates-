@@ -1,0 +1,13 @@
+{
+  "name": "candidate-analytics-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Candidate analytics dashboard backed by live Zoho Recruit data",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

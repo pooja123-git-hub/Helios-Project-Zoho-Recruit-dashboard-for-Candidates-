@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Candidate Recruitment Dashboard</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+</head>
+<body>
+  <header class="hero">
+    <div>
+      <h1>Candidate Recruitment Dashboard</h1>
+      <p id="meta">Loading candidates from Zoho Recruit…</p>
+    </div>
+    <div class="hero-actions">
+      <span class="pill" id="totalPill">Total: –</span>
+      <button class="pill pill-btn" id="refreshBtn" title="Fetch the latest data from Zoho Recruit">↻ Refresh</button>
+      <a class="btn-white" id="openRecruit" href="https://recruit.zoho.com/recruit/" target="_blank" rel="noopener">Open Candidates in Recruit</a>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs" role="tablist"></nav>
+
+  <section class="filters">
+    <div class="filter-top">
+      <label class="f"><span>Search</span><input type="search" id="search" placeholder="Name, ID, role, location…"></label>
+      <label class="f"><span>Created</span>
+        <select id="datePreset">
+          <option value="all">All time</option>
+          <option value="0">Today</option>
+          <option value="7">Last 7 days</option>
+          <option value="30">Last 30 days</option>
+          <option value="90">Last 90 days</option>
+          <option value="365">Last 12 months</option>
+          <option value="custom">Custom dates…</option>
+        </select>
+      </label>
+      <label class="f custom" hidden><span>From</span><input type="date" id="dateFrom"></label>
+      <label class="f custom" hidden><span>To</span><input type="date" id="dateTo"></label>
+      <div id="mainFilters" class="filter-slot"></div>
+      <button class="link-btn" id="moreBtn" aria-expanded="false">More filters ▾</button>
+    </div>
+    <div class="filter-more" id="moreFilters" hidden></div>
+    <div class="chips-row">
+      <div class="chips" id="chips"></div>
+      <button class="link-btn" id="clearBtn" hidden>Clear all filters</button>
+    </div>
+  </section>
+
+  <main id="main" class="loading">
+    <div class="banner" id="banner" hidden></div>
+    <div id="panels"></div>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
