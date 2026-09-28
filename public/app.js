@@ -1,4 +1,4 @@
-/* Candidate Recruitment Dashboard — client.
+/* Candidate Dashboard — client.
  * Loads normalized candidate records from /api/data and does all filtering,
  * counting and charting in the browser. Clicking a bar or slice filters by it. */
 'use strict';
@@ -633,7 +633,8 @@ async function load() {
     for (const r of body.records) r._search = [r.name, r.code, r.role, r.location, r.source, r.jobs.join(' ')].filter(Boolean).join(' ').toLowerCase();
     DATA = body;
     if (DATA.orgId) $('#openRecruit').href = `https://recruit.zoho.com/recruit/org${DATA.orgId}/ShowTab.do?module=Candidates`;
-    $('#meta').textContent = `Live from Zoho Recruit · last synced ${new Date(DATA.fetchedAt).toLocaleString()}`;
+    // Last sync time stays available on hover over the Refresh button.
+    $('#refreshBtn').title = `Last synced ${new Date(DATA.fetchedAt).toLocaleString()} · click to fetch the latest data from Zoho`;
     banner('');
     render();
   } catch (err) {
@@ -651,7 +652,6 @@ async function refreshFromZoho() {
   for (;;) {
     await new Promise((r) => setTimeout(r, 1500));
     const s = await (await fetch('/api/status')).json();
-    $('#meta').textContent = s.message;
     if (s.state === 'error') banner(`Sync failed: ${s.message}`);
     if (s.state !== 'loading') break;
   }
