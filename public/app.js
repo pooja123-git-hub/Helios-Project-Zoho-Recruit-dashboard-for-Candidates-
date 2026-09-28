@@ -51,6 +51,7 @@ const plainColor = (v) => (EMPTY_VALUES.has(v) ? C.grey : C.red);
 
 // ---------- filters (every Candidate field that holds data) ----------
 const yesNo = (b) => (b ? 'Yes' : 'No');
+const inAnyRound = (r) => r.assessmentStatus !== 'Not started' || r.technicalStatus !== 'Not started' || r.hrResult !== 'Not recorded' || Boolean(r.interviewDate || r.hrDate || r.technicalDate);
 const FILTERS = [
   // shown in the top row
   { key: 'stage', label: 'Candidate Stage', get: (r) => r.stage, main: true },
@@ -83,6 +84,13 @@ const FILTERS = [
   { key: 'inviteStatus', label: 'Career Page Invite', get: (r) => r.inviteStatus },
   { key: 'tags', label: 'Tag', get: (r) => (r.tags?.length ? r.tags : ['No tag']) },
   { key: 'resume', label: 'Resume Attached', get: (r) => yesNo(r.resume) },
+  { key: 'applied', label: 'Applied to a Job', get: (r) => yesNo(r.applications > 0) },
+  { key: 'inRound', label: 'In Any Round', get: (r) => yesNo(inAnyRound(r)) },
+  { key: 'assessmentDone', label: 'Assessment Done', get: (r) => yesNo(r.assessmentStatus !== 'Not started') },
+  { key: 'technicalDone', label: 'Technical Round Done', get: (r) => yesNo(r.technicalStatus !== 'Not started') },
+  { key: 'hrDone', label: 'HR Round Done', get: (r) => yesNo(r.hrResult !== 'Not recorded') },
+  { key: 'interviewScheduled', label: 'Interview Scheduled', get: (r) => yesNo(Boolean(r.interviewDate)) },
+  { key: 'hired', label: 'Hired / Onboarding', get: (r) => yesNo(r.hired) },
 ];
 const F = Object.fromEntries(FILTERS.map((f) => [f.key, f]));
 
@@ -99,11 +107,12 @@ function dateBounds() {
   const t = today();
   if (dates.preset === 'all') return ['', ''];
   if (dates.preset === 'custom') return [dates.from, dates.to];
-  return [addDays(t, -Number(dates.preset)), t];
+  const n = Number(dates.preset);
+  return [n === 0 ? t : addDays(t, -n + 1), t];
 }
 
-function filtered(exceptKey) {
-  const [from, to] = dateBounds();
+function filtered(exceptKey, { ignoreDates = false } = {}) {
+  const [from, to] = ignoreDates ? ['', ''] : dateBounds();
   const q = search.toLowerCase();
   const act = Object.entries(active).filter(([k, s]) => k !== exceptKey && s.size);
   return DATA.records.filter((r) => {
@@ -281,8 +290,68 @@ function candidateTable(el, rows, colKeys, { pageSize = 25, sortKey = 'created',
 }
 
 // ---------- page pieces ----------
-const stats = (list) => `<div class="stats">${list.map(([label, value, sub]) =>
-  `<div class="stat"><div class="label">${esc(label)}</div><div class="value">${esc(value)}</div>${sub ? `<div class="sub">${esc(sub)}</div>` : ''}</div>`).join('')}</div>`;
+// A card's optional 4th element makes it a filter button:
+// { key, value } toggles that filter; { preset } or { from, to } sets the Created date.
+function statOn(f) {
+  if (f.key) return Boolean(active[f.key]?.has(f.value));
+  if (f.preset) return dates.preset === f.preset;
+  return dates.preset === 'custom' && dates.from === f.from && dates.to === f.to;
+}
+const stats = (list) => `<div class="stats">${list.map(([label, value, sub, f]) => {
+  const inner = `<div class="label">${esc(label)}</div><div class="value">${esc(value)}</div>${sub ? `<div class="sub">${esc(sub)}</div>` : ''}`;
+  if (!f) return `<div class="stat">${inner}</div>`;
+  const attrs = f.key ? `data-fkey="${esc(f.key)}" data-fval="${esc(f.value)}"`
+    : f.preset ? `data-preset="${esc(f.preset)}"` : `data-from="${esc(f.from)}" data-to="${esc(f.to)}"`;
+  return `<button class="stat stat-btn" ${attrs} aria-pressed="${statOn(f)}">${inner}</button>`;
+}).join('')}</div>`;
+
+// Report columns for each tab's cards.
+const REPORT_COLS = {
+  perDay: ['name', 'created', 'source', 'stage', 'status', 'location', 'job', 'owner'],
+  call: ['name', 'callStatus', 'callDate', 'callRemarks', 'interview', 'stage', 'source', 'job', 'owner'],
+  round: ['name', 'interview', 'assessment', 'score', 'technical', 'rating', 'hr', 'job', 'owner'],
+  final: ['name', 'final', 'hiring', 'hr', 'outcome', 'stage', 'job', 'owner'],
+  default: ['code', 'name', 'created', 'stage', 'status', 'source', 'location', 'job', 'exp', 'age', 'owner'],
+};
+
+// Clicking a card opens a report listing exactly those candidates (within the
+// other active filters). "Filter dashboard" in the report applies it as a filter.
+function onStatClick(e) {
+  const b = e.target.closest('.stat-btn');
+  if (!b) return;
+  const title = b.querySelector('.label').textContent.trim();
+  let rows; let applyFilter;
+  if (b.dataset.fkey) {
+    const { fkey: key, fval: value } = b.dataset;
+    rows = filtered(key).filter((r) => { const v = F[key].get(r); return Array.isArray(v) ? v.includes(value) : v === value; });
+    applyFilter = () => { active[key] = new Set([value]); render(); };
+  } else {
+    const t = today();
+    const from = b.dataset.preset ? (b.dataset.preset === '0' ? t : addDays(t, -Number(b.dataset.preset) + 1)) : b.dataset.from;
+    const to = b.dataset.preset ? t : b.dataset.to;
+    rows = filtered(null, { ignoreDates: true }).filter((r) => r.created >= from && r.created <= to);
+    applyFilter = () => {
+      if (b.dataset.preset) {
+        dates = { preset: b.dataset.preset, from: '', to: '' };
+        $('#datePreset').value = b.dataset.preset;
+        document.querySelectorAll('.f.custom').forEach((el) => { el.hidden = true; });
+        render();
+      } else setDateRange(from, to);
+    };
+  }
+  openReport(title, rows, REPORT_COLS[currentTab] || REPORT_COLS.default, applyFilter);
+}
+
+function openReport(title, rows, cols, applyFilter) {
+  const dlg = $('#report');
+  $('#reportTitle').textContent = title;
+  $('#reportCount').textContent = `${fmt(rows.length)} candidate${rows.length === 1 ? '' : 's'}`;
+  candidateTable($('#reportBody'), rows, cols, { pageSize: 25, sortKey: cols.includes('created') ? 'created' : 'name', sortDir: cols.includes('created') ? -1 : 1 });
+  $('#reportExport').onclick = () => exportCsv(rows, title);
+  $('#reportFilter').onclick = () => { dlg.close(); applyFilter(); };
+  $('#reportExport').disabled = !rows.length;
+  dlg.showModal();
+}
 const card = (id, title, _hint = '', cls = '') => `<div class="card"><h3>${esc(title)}</h3><div id="${id}" class="card-body ${cls}"></div></div>`;
 const note = (text) => `<div class="note">ℹ️ ${esc(text)}</div>`;
 const byKey = (rows, key, opts) => sortedItems(countBy(rows, F[key].get), { order: F[key].order?.(), ...opts });
@@ -305,7 +374,8 @@ const TABS = [
       const avg = days.size ? rows.length / days.size : 0;
       const titles = { 14: 'Last 14 days with data', 30: 'Last 30 days', 90: 'Last 90 days', month: 'Per month (all time)' };
       p.innerHTML = `
-        ${stats([['Today', fmt(on(t))], ['Yesterday', fmt(on(addDays(t, -1)))], ['Last 7 days', fmt(within(7))], ['Last 30 days', fmt(within(30))],
+        ${stats([['Today', fmt(on(t)), '', { preset: '0' }], ['Yesterday', fmt(on(addDays(t, -1))), '', { from: addDays(t, -1), to: addDays(t, -1) }],
+          ['Last 7 days', fmt(within(7)), '', { preset: '7' }], ['Last 30 days', fmt(within(30)), '', { preset: '30' }],
           ['Average per active day', avg.toFixed(1), `${fmt(days.size)} days with new candidates`]])}
         <div class="section-title"><span>Candidates created ${perDayRange === 'month' ? 'per month' : 'per day'} (${esc(titles[perDayRange].toLowerCase())})</span>
           <span class="seg">${Object.entries(titles).map(([k, v]) => `<button data-r="${k}" aria-pressed="${k === perDayRange}">${esc(v)}</button>`).join('')}</span></div>
@@ -357,7 +427,7 @@ const TABS = [
       const sel = active.callStatus;
       p.innerHTML = `
         <div class="stats">${CALL_STATUSES.map((s) => `
-          <button class="stat stat-btn" data-v="${esc(s.value)}" aria-pressed="${Boolean(sel?.has(s.value))}" style="border-top-color:${s.color}">
+          <button class="stat stat-btn" data-fkey="callStatus" data-fval="${esc(s.value)}" aria-pressed="${Boolean(sel?.has(s.value))}" style="border-top-color:${s.color}">
             <div class="label">${s.icon} ${esc(s.label)}</div><div class="value">${fmt(counts.get(s.value) || 0)}</div></button>`).join('')}
           <div class="stat" style="border-top-color:${C.text2}"><div class="label">📈 Pick-up rate</div><div class="value">${pct(picked, called.length)}</div>
             <div class="sub">${fmt(picked)} picked of ${fmt(called.length)} called</div></div>
@@ -366,7 +436,6 @@ const TABS = [
         <div class="row">${card('callChart', 'Call Status', 'Share of called candidates · click a bar to filter')}${card('callDayChart', 'Calls per day', 'By Call Date', 'chart')}</div>
         <div class="section-title"><span>${sel ? `${esc([...sel].join(', '))} — candidates` : 'Called candidates'}</span></div>
         <div class="card"><div id="callTable"></div></div>`;
-      p.querySelectorAll('.stat-btn').forEach((b) => b.addEventListener('click', () => toggle('callStatus', b.dataset.v)));
 
       // "Not called yet" has its own card; charting it would flatten the real call results.
       const items = CALL_STATUSES.filter((s) => !NOT_CALLED.has(s.value)).map((s) => ({ name: s.value, value: counts.get(s.value) || 0 }));
@@ -397,14 +466,14 @@ const TABS = [
   {
     id: 'round', icon: '🎯', label: 'Round Status',
     render(p, rows) {
-      const inRound = rows.filter((r) => r.assessmentStatus !== 'Not started' || r.technicalStatus !== 'Not started' || r.hrResult !== 'Not recorded' || r.interviewDate || r.hrDate || r.technicalDate);
+      const inRound = rows.filter(inAnyRound);
       const scores = rows.map((r) => r.assessmentScore).filter((s) => s != null);
       p.innerHTML = `
-        ${stats([['Candidates in any round', fmt(inRound.length)],
-          ['Assessment done', fmt(rows.filter((r) => r.assessmentStatus !== 'Not started').length), scores.length ? `Median score ${median(scores)}` : ''],
-          ['Technical round', fmt(rows.filter((r) => r.technicalStatus !== 'Not started').length)],
-          ['HR round', fmt(rows.filter((r) => r.hrResult !== 'Not recorded').length)],
-          ['Interviews scheduled', fmt(rows.filter((r) => r.interviewDate).length)]])}
+        ${stats([['Candidates in any round', fmt(inRound.length), '', { key: 'inRound', value: 'Yes' }],
+          ['Assessment done', fmt(rows.filter((r) => r.assessmentStatus !== 'Not started').length), scores.length ? `Median score ${median(scores)}` : '', { key: 'assessmentDone', value: 'Yes' }],
+          ['Technical round', fmt(rows.filter((r) => r.technicalStatus !== 'Not started').length), '', { key: 'technicalDone', value: 'Yes' }],
+          ['HR round', fmt(rows.filter((r) => r.hrResult !== 'Not recorded').length), '', { key: 'hrDone', value: 'Yes' }],
+          ['Interviews scheduled', fmt(rows.filter((r) => r.interviewDate).length), '', { key: 'interviewScheduled', value: 'Yes' }]])}
         <div class="section-title"><span>Results by round</span></div>
         <div class="row">
           ${card('assessStatus', 'Assessment Status', 'Click a bar to filter')}
@@ -429,11 +498,11 @@ const TABS = [
     render(p, rows) {
       const decided = rows.filter((r) => r.finalStatus !== 'Not recorded' || r.hiringResult !== 'Not recorded' || r.outcome !== 'No decision' || r.hired);
       p.innerHTML = `
-        ${stats([['Selected', fmt(rows.filter((r) => r.outcome === 'Selected').length)],
-          ['Not selected / rejected', fmt(rows.filter((r) => r.outcome === 'Rejected').length)],
-          ['On hold', fmt(rows.filter((r) => r.outcome === 'On hold').length)],
-          ['Offered', fmt(rows.filter((r) => r.stage === 'Offered').length)],
-          ['Hired / onboarding', fmt(rows.filter((r) => r.hired).length)]])}
+        ${stats([['Selected', fmt(rows.filter((r) => r.outcome === 'Selected').length), '', { key: 'outcome', value: 'Selected' }],
+          ['Not selected / rejected', fmt(rows.filter((r) => r.outcome === 'Rejected').length), '', { key: 'outcome', value: 'Rejected' }],
+          ['On hold', fmt(rows.filter((r) => r.outcome === 'On hold').length), '', { key: 'outcome', value: 'On hold' }],
+          ['Offered', fmt(rows.filter((r) => r.stage === 'Offered').length), '', { key: 'stage', value: 'Offered' }],
+          ['Hired / onboarding', fmt(rows.filter((r) => r.hired).length), '', { key: 'hired', value: 'Yes' }]])}
         <div class="section-title"><span>Final outcomes</span></div>
         <div class="row">${card('finalStatus', 'Final Status', ' ')}${card('hiringResult', 'Hiring Result', ' ')}</div>
         <div class="row">${card('outcomeChart', 'Overall outcome', ' ')}${card('candStatus', 'Candidate Status', 'Click a bar to filter')}</div>
@@ -472,8 +541,8 @@ const TABS = [
       p.innerHTML = `
         ${stats([['Median age', ages.length ? String(median(ages)) : '–', `Age known for ${pct(ages.length, rows.length)}`],
           ['Median experience', exps.length ? `${+median(exps).toFixed(1)} ${+median(exps).toFixed(1) === 1 ? 'yr' : 'yrs'}` : '–', `Known for ${pct(exps.length, rows.length)}`],
-          ['Freshers', fmt(rows.filter((r) => r.expBand === 'Fresher').length)],
-          ['Resume attached', pct(rows.filter((r) => r.resume).length, rows.length)]])}
+          ['Freshers', fmt(rows.filter((r) => r.expBand === 'Fresher').length), '', { key: 'expBand', value: 'Fresher' }],
+          ['Resume attached', pct(rows.filter((r) => r.resume).length, rows.length), '', { key: 'resume', value: 'Yes' }]])}
         <div class="section-title"><span>Experience, age & gender</span></div>
         <div class="row">${card('expChart', 'Work experience', 'Click a bar to filter')}${card('ageChart', 'Age')}</div>
         <div class="row">${card('genderChart', 'Gender', 'Based on salutation (Mr. / Ms.) — most records leave it blank', 'chart')}${card('deptChart', 'Department')}</div>
@@ -496,7 +565,7 @@ const TABS = [
     render(p, rows) {
       const withJob = rows.filter((r) => r.applications > 0);
       p.innerHTML = `
-        ${stats([['Candidates who applied', fmt(withJob.length), `${pct(withJob.length, rows.length)} of candidates`],
+        ${stats([['Candidates who applied', fmt(withJob.length), `${pct(withJob.length, rows.length)} of candidates`, { key: 'applied', value: 'Yes' }],
           ['Applications', fmt(withJob.reduce((s, r) => s + r.applications, 0))],
           ['Open job openings', fmt(DATA.jobs.filter((j) => /progress|open|active/i.test(j.status || '')).length), `${fmt(DATA.jobs.length)} in total`]])}
         <div class="section-title"><span>Candidates by job opening</span></div>
@@ -586,13 +655,18 @@ function resetDates() {
 // ---------- render ----------
 function buildTabs() {
   $('#tabs').innerHTML = TABS.map((t) => `<button class="tab" role="tab" data-tab="${t.id}" aria-selected="${t.id === currentTab}"><span class="ico">${t.icon}</span>${esc(t.label)}</button>`).join('');
-  $('#tabs').querySelectorAll('.tab').forEach((b) => b.addEventListener('click', () => {
-    currentTab = b.dataset.tab;
-    $('#tabs').querySelectorAll('.tab').forEach((x) => x.setAttribute('aria-selected', String(x === b)));
-    history.replaceState(null, '', `#${currentTab}`);
-    render();
-  }));
+  $('#tabs').querySelectorAll('.tab').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab)));
 }
+
+function showTab(id) {
+  if (!TABS.some((t) => t.id === id)) return;
+  currentTab = id;
+  $('#tabs').querySelectorAll('.tab').forEach((x) => x.setAttribute('aria-selected', String(x.dataset.tab === id)));
+  if (location.hash.slice(1) !== id) history.replaceState(null, '', `#${id}`);
+  render();
+}
+// Typed or bookmarked links like /#round switch tabs without a reload.
+window.addEventListener('hashchange', () => showTab(location.hash.slice(1)));
 
 function render() {
   if (!DATA) return;
@@ -606,14 +680,14 @@ function render() {
   renderChips();
 }
 
-function exportCsv(rows) {
+function exportCsv(rows, name = 'candidates') {
   const cols = ['code', 'name', 'created', 'stage', 'status', 'source', 'origin', 'owner', 'department', 'location', 'city', 'state', 'country', 'gender', 'age', 'expYears',
     'jobs', 'appStatus', 'callStatus', 'callDate', 'assessmentStatus', 'assessmentResult', 'assessmentScore', 'technicalStatus', 'technicalRating', 'hrResult', 'hiringResult', 'finalStatus', 'outcome'];
   const cell = (v) => { const s = Array.isArray(v) ? v.join('; ') : v == null ? '' : String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
   const csv = [cols.join(','), ...rows.map((r) => cols.map((c) => cell(r[c])).join(','))].join('\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([`﻿${csv}`], { type: 'text/csv' }));
-  a.download = `candidates-${today()}.csv`; a.click();
+  a.download = `${String(name).replace(/[^\w]+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'candidates'}-${today()}.csv`; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
@@ -686,6 +760,10 @@ $('#clearBtn').addEventListener('click', () => {
   resetDates();
 });
 $('#refreshBtn').addEventListener('click', refreshFromZoho);
+$('#panels').addEventListener('click', onStatClick);
+$('#reportClose').addEventListener('click', () => $('#report').close());
+// Clicking the dimmed backdrop closes the report.
+$('#report').addEventListener('click', (e) => { if (e.target === $('#report')) $('#report').close(); });
 window.addEventListener('resize', () => charts.forEach((c) => c.resize()));
 
 load();

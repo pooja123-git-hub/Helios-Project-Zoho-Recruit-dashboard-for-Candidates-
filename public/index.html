@@ -52,6 +52,21 @@
     <div id="panels"></div>
   </main>
 
+  <dialog id="report" aria-labelledby="reportTitle">
+    <div class="report-head">
+      <div>
+        <h2 id="reportTitle"></h2>
+        <span id="reportCount"></span>
+      </div>
+      <div class="report-actions">
+        <button class="btn" id="reportFilter">Filter dashboard</button>
+        <button class="btn primary" id="reportExport">⬇ Export CSV</button>
+        <button class="report-close" id="reportClose" aria-label="Close report">×</button>
+      </div>
+    </div>
+    <div class="report-body" id="reportBody"></div>
+  </dialog>
+
   <script src="app.js"></script>
 </body>
 </html>
