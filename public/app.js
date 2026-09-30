@@ -695,8 +695,8 @@ function exportCsv(rows, name = 'candidates') {
 const EXPECTED_SCHEMA = 2; // must match SCHEMA_VERSION in lib/transform.js
 function banner(msg) { $('#banner').hidden = !msg; $('#banner').textContent = msg || ''; }
 
-async function load() {
-  $('#main').classList.add('loading');
+async function load(quiet = false) {
+  if (!quiet) $('#main').classList.add('loading');
   try {
     const res = await fetch('/api/data');
     const body = await res.json();
@@ -732,6 +732,16 @@ async function refreshFromZoho() {
   btn.disabled = false; btn.textContent = '↻ Refresh';
   await load();
 }
+
+// Pick up each background sync without a page reload; skipped while the tab is hidden.
+const POLL_MS = 5 * 1000;
+setInterval(async () => {
+  if (document.hidden || !DATA || $('#refreshBtn').disabled) return;
+  try {
+    const s = await (await fetch('/api/status')).json();
+    if (s.fetchedAt && s.fetchedAt !== DATA.fetchedAt) await load(true);
+  } catch { /* server briefly unreachable; try again next tick */ }
+}, POLL_MS);
 
 // ---------- wiring ----------
 // The URL hash picks the tab, so each tab can be bookmarked (e.g. /#call).

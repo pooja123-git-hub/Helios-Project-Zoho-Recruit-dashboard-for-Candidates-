@@ -17,7 +17,8 @@ const HOST = process.env.HOST || (HOSTED ? '0.0.0.0' : '127.0.0.1');
 // Raw Zoho records are cached so transform changes apply without a re-fetch.
 // Hosted platforms have a read-only project folder, so the cache goes to the temp dir there.
 const CACHE_FILE = HOSTED ? path.join(os.tmpdir(), 'zoho-raw.json') : path.resolve('data/raw.json');
-const AUTO_REFRESH_MS = 30 * 60 * 1000;
+// Overlapping ticks share the in-flight fetch (see refresh()), so a slow sync never stacks up.
+const AUTO_REFRESH_MS = 5 * 1000;
 const TOKEN_REFRESH_MS = 40 * 60 * 1000;
 const PUBLIC_DIR = path.resolve('public');
 
