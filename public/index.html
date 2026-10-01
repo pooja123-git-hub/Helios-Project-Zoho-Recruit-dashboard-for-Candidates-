@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Candidate Dashboard</title>
   <link rel="stylesheet" href="styles.css">
-  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
 </head>
 <body>
   <header class="hero">
@@ -13,59 +12,52 @@
       <h1>Candidate Dashboard</h1>
     </div>
     <div class="hero-actions">
-      <span class="pill" id="totalPill">Total: –</span>
-      <button class="pill pill-btn" id="refreshBtn" title="Fetch the latest data from Zoho Recruit">↻ Refresh</button>
+      <span class="pill" id="totalPill">Total records: –</span>
       <a class="btn-white" id="openRecruit" href="https://recruit.zoho.com/recruit/" target="_blank" rel="noopener">Open Candidates in Recruit</a>
     </div>
   </header>
 
-  <nav class="tabs" id="tabs" role="tablist"></nav>
-
-  <section class="filters">
-    <div class="filter-top">
-      <label class="f"><span>Search</span><input type="search" id="search" placeholder="Name, ID, role, location…"></label>
-      <label class="f"><span>Created</span>
-        <select id="datePreset">
-          <option value="all">All time</option>
-          <option value="0">Today</option>
-          <option value="7">Last 7 days</option>
-          <option value="30">Last 30 days</option>
-          <option value="90">Last 90 days</option>
-          <option value="365">Last 12 months</option>
-          <option value="custom">Custom dates…</option>
-        </select>
-      </label>
-      <label class="f custom" hidden><span>From</span><input type="date" id="dateFrom"></label>
-      <label class="f custom" hidden><span>To</span><input type="date" id="dateTo"></label>
-      <div id="mainFilters" class="filter-slot"></div>
-      <button class="link-btn" id="moreBtn" aria-expanded="false">More filters ▾</button>
-    </div>
-    <div class="filter-more" id="moreFilters" hidden></div>
-    <div class="chips-row">
-      <div class="chips" id="chips"></div>
-      <button class="link-btn" id="clearBtn" hidden>Clear all filters</button>
-    </div>
-  </section>
-
   <main id="main" class="loading">
     <div class="banner" id="banner" hidden></div>
-    <div id="panels"></div>
-  </main>
 
-  <dialog id="report" aria-labelledby="reportTitle">
-    <div class="report-head">
+    <div class="datebar">
+    <div class="seg" id="period" role="group" aria-label="Date">
+      <button data-p="today">Today</button>
+      <button data-p="week">Last week</button>
+      <button data-p="month">Last month</button>
+      <button data-p="custom">Custom</button>
+    </div>
+    <span class="custom-dates" id="customDates" hidden>
+      <label>From <input type="date" id="fromDate"></label>
+      <label>To <input type="date" id="toDate"></label>
+    </span>
+    </div>
+
+    <div class="summaries" id="summaries">
       <div>
-        <h2 id="reportTitle"></h2>
-        <span id="reportCount"></span>
+        <div class="section-title"><span>Candidate status</span></div>
+        <div class="card summary"><div id="summary-status"></div></div>
       </div>
-      <div class="report-actions">
-        <button class="btn" id="reportFilter">Filter dashboard</button>
-        <button class="btn primary" id="reportExport">⬇ Export CSV</button>
-        <button class="report-close" id="reportClose" aria-label="Close report">×</button>
+      <div>
+        <div class="section-title"><span>Call status</span></div>
+        <div class="card summary"><div id="summary-call"></div></div>
+      </div>
+      <div class="wide">
+        <div class="section-title"><span>Round status</span></div>
+        <div class="card summary"><div id="summary-round"></div></div>
+      </div>
+      <div>
+        <div class="section-title"><span>Final decision</span></div>
+        <div class="card summary"><div id="summary-final"></div></div>
       </div>
     </div>
-    <div class="report-body" id="reportBody"></div>
-  </dialog>
+
+    <div class="section-title">
+      <span id="listTitle">Candidates</span>
+      <button class="btn" id="exportBtn">⬇ Export CSV</button>
+    </div>
+    <div class="card"><div id="list"></div></div>
+  </main>
 
   <script src="app.js"></script>
 </body>
