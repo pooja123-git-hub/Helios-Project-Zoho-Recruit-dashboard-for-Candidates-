@@ -183,7 +183,8 @@ http.createServer(async (req, res) => {
     if (!file.startsWith(PUBLIC_DIR) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
       res.writeHead(404); return res.end('Not found');
     }
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' });
+    // no-cache: browsers re-check on every load, so a new deploy shows up without a hard refresh.
+    res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
     fs.createReadStream(file).pipe(res);
   } catch (err) {
     sendJson(res, 500, { error: err.message });
