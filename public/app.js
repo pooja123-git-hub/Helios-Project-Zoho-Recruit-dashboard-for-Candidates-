@@ -148,7 +148,7 @@ function drawList(rows) {
     <div class="table-wrap"><table>
       <thead><tr>${COLS.map((c) => `<th class="sortable" data-k="${c.key}" aria-sort="${c.key === table.sortKey ? (table.sortDir > 0 ? 'ascending' : 'descending') : 'none'}" title="${esc(c.hint?.() || '')}">${esc(typeof c.label === 'function' ? c.label() : c.label)}</th>`).join('')}</tr></thead>
       <tbody>${slice.map((r) => `<tr>${COLS.map((c) => `<td>${c.html ? c.html(r) : esc(c.v(r) ?? '–')}</td>`).join('')}</tr>`).join('')
-        || `<tr><td colspan="${COLS.length}" class="empty">No candidates for ${esc(periodLabel().toLowerCase())}</td></tr>`}</tbody>
+        || `<tr><td colspan="${COLS.length}" class="empty">${search ? 'No candidates match your search' : `No candidates for ${esc(periodLabel().toLowerCase())}`}</td></tr>`}</tbody>
     </table></div>
     <div class="table-foot">
       <span>Showing ${fmt(sorted.length ? table.page * PAGE_SIZE + 1 : 0)}–${fmt(Math.min(sorted.length, (table.page + 1) * PAGE_SIZE))} of ${fmt(sorted.length)}</span>
@@ -162,6 +162,7 @@ function drawList(rows) {
 
 // ---------- page ----------
 let shown = []; // rows in the list right now, for Export CSV
+let search = ''; // lower-case search text; while set, the list searches every candidate
 
 function render() {
   if (!DATA) return;
@@ -191,6 +192,14 @@ function render() {
 
   const g = GROUPS[picked.group];
   const multi = Object.values(GROUPS).filter((x) => x.card === g.card).length > 1; // card with several sections
+  if (search) {
+    // Search looks through every candidate, whatever the date or clicked row.
+    const words = search.split(/\s+/);
+    shown = DATA.records.filter((r) => words.every((w) => r._search.includes(w)));
+    $('#listTitle').textContent = `Search results for “${$('#search').value.trim()}” · all dates (${fmt(shown.length)})`;
+    $('#exportBtn').disabled = !shown.length;
+    return drawList(shown);
+  }
   shown = inPeriod(g).filter((r) => !picked.value || g.get(r) === picked.value);
   $('#listTitle').textContent = `${picked.value ? g.labels?.[picked.value] || picked.value : (multi ? g.title : `All ${g.title}`)}${picked.value && multi ? ` (${g.title})` : ''} · ${periodLabel()} (${fmt(shown.length)})`;
   $('#exportBtn').disabled = !shown.length;
@@ -209,7 +218,7 @@ function exportCsv() {
   const csv = [cols.join(','), ...shown.map((r) => cols.map((c) => cell(r[c])).join(','))].join('\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([`﻿${csv}`], { type: 'text/csv' }));
-  a.download = `${picked.group === 'status' ? 'candidates' : picked.group}-${(picked.value || 'all').toLowerCase().replace(/\W+/g, '-')}-${period}-${today()}.csv`; a.click();
+  a.download = `${search ? 'search' : picked.group === 'status' ? 'candidates' : picked.group}-${(search || picked.value || 'all').toLowerCase().replace(/\W+/g, '-')}-${period}-${today()}.csv`; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
@@ -227,6 +236,9 @@ async function load(quiet = false) {
       throw new Error('The server is running an older version of the dashboard. In the terminal press Ctrl+C, run "npm start" again, then reload this page.');
     }
     DATA = body;
+    for (const r of DATA.records) {
+      r._search = [r.name, r.code, r.role, r.location, r.source, r.owner, r.jobs.join(' '), r.callRemarks].filter(Boolean).join(' ').toLowerCase();
+    }
     if (DATA.orgId) $('#openRecruit').href = `https://recruit.zoho.com/recruit/org${DATA.orgId}/ShowTab.do?module=Candidates`;
     // Every candidate in Zoho Recruit; hover shows when the data was last fetched.
     $('#totalPill').textContent = `Total records: ${fmt(DATA.records.length)}`;
@@ -252,6 +264,11 @@ setInterval(async () => {
 }, POLL_MS);
 
 // ---------- wiring ----------
+let searchTimer;
+$('#search').addEventListener('input', (e) => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => { search = e.target.value.trim().toLowerCase(); table.page = 0; render(); }, 250);
+});
 $('#period').addEventListener('click', (e) => {
   const b = e.target.closest('button');
   if (!b) return;

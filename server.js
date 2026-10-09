@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
+import zlib from 'node:zlib';
 import { ZohoRecruit } from './lib/zoho.js';
 import { buildDataset } from './lib/transform.js';
 
@@ -37,6 +38,7 @@ let dataset = null;
 // fetchedAt changes only when the data changed, so open pages re-download only then.
 let status = { state: 'idle', message: '', fetchedAt: null };
 let inflight = null;
+let packed = null; // the /api/data response for the current dataset, plain and gzipped
 
 function build(raw) {
   return { fetchedAt: raw.fetchedAt, ...buildDataset(raw.candidates, raw.applications, raw.jobOpenings) };
@@ -167,7 +169,14 @@ http.createServer(async (req, res) => {
       if (!dataset) await refresh();
       else if (isStale()) await update();
       if (!dataset) return sendJson(res, 502, { error: status.message });
-      return sendJson(res, 200, { ...dataset, orgId: zoho.env.ZOHO_RECRUIT_URL_ORG || zoho.env.ZOHO_ORG_ID || null });
+      // The dataset is ~14 MB of JSON but ~0.5 MB gzipped; compressed once per version.
+      if (packed?.fetchedAt !== dataset.fetchedAt) {
+        const json = JSON.stringify({ ...dataset, orgId: zoho.env.ZOHO_RECRUIT_URL_ORG || zoho.env.ZOHO_ORG_ID || null });
+        packed = { fetchedAt: dataset.fetchedAt, json, gz: zlib.gzipSync(json) };
+      }
+      const gzip = /\bgzip\b/.test(req.headers['accept-encoding'] || '');
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', Vary: 'Accept-Encoding', ...(gzip ? { 'Content-Encoding': 'gzip' } : {}) });
+      return res.end(gzip ? packed.gz : packed.json);
     }
     if (url.pathname === '/api/refresh' && req.method === 'POST') {
       refresh();

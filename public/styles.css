@@ -47,6 +47,8 @@ main.loading { opacity: .5; pointer-events: none; }
 .seg button[aria-pressed="true"] { background: var(--red); color: #fff; }
 
 .custom-dates { display: inline-flex; gap: 12px; flex-wrap: wrap; }
+.search { margin-left: auto; width: min(360px, 100%); border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 8px 16px; }
+.search:focus { outline: 2px solid var(--red-soft); border-color: var(--red); }
 .custom-dates label { color: var(--text-2); font-weight: 600; font-size: 13px; }
 .custom-dates input { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 6px 8px; margin-left: 4px; }
 
