@@ -23,12 +23,12 @@ Credentials come from `.env` (`ZOHO_ACCESS_TOKEN`, `ZOHO_REFRESH_TOKEN`, `ZOHO_C
 
 One page, tables only.
 
-- **Date buttons** — Today, Last week (7 days), Last month (30 days), or Custom with From / To dates.
+- **Date buttons** — Today, Last week (7 days), Last month (30 days), or Custom with From / To dates. Every table counts the candidates **created** in those dates (the Zoho `Created Date` field when filled in, else the time the record was added), so all tables describe the same candidates and a later edit never moves a candidate to another day.
 - **Candidate status table** — how many candidates are Fresh / In Progress / Rejected in that range. Click a row to list only that status; click Total for all.
-- **Call status table** — candidates with a call recorded in that range, by call status (Picked / Contacted, Not Picked, …). Dated by Call Date, or the last-updated date when Call Date is blank.
-- **Round status table** — Assessment, Technical, HR and CEO round (Zoho's Final Status field): candidates with a result recorded in that range, by result. Dated by the round's date, or the last-updated date when that is blank.
-- **Final decision table** — Offer stages (To-be-Offered, Offer-Accepted, Offer-Declined) and Final result (Joined, Not Joined, Rejected). Final result is dated by Date of Joining, or the last-updated date when that is blank.
+- **Call status table** — of those candidates, the ones with a call recorded, by call status (Picked / Contacted, Not Picked, …).
+- **Round status table** — Assessment, Technical, HR and CEO round (Zoho's Final Status field): of those candidates, the ones with a result recorded, by result.
+- **Final decision table** — Offer stages (To-be-Offered, Offer-Accepted, Offer-Declined) and Final result (Joined, Not Joined, Rejected).
 - **Search** — type a name, Candidate ID, role, location, source, owner, job or call remark; the list then shows matching candidates from all dates. Clear it to go back.
 - **Candidate list** — the matching candidates; click a column heading to sort, **Export CSV** to download.
 
-Status comes from the custom status picklist (`Candidate_Status1`) when it is filled in, otherwise Rejected when the Call Status is Call Rejected, otherwise from the `Fresh_Candidate` checkbox. A Fresh candidate is dated by its created date; any other status by its last-updated date.
+Status comes from the custom status picklist (`Candidate_Status1`) when it is filled in, otherwise Rejected when the Call Status is Call Rejected, otherwise from the `Fresh_Candidate` checkbox.

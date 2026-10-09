@@ -14,62 +14,53 @@ const dayLabel = (iso) => (iso ? new Date(`${iso}T00:00:00`).toLocaleDateString(
 // ---------- state ----------
 // Days covered by each date button, counting today.
 const PERIODS = { today: { label: 'Today', days: 1 }, week: { label: 'Last week', days: 7 }, month: { label: 'Last month', days: 30 }, custom: { label: 'Custom' } };
-// What the summary tables count. Each group counts candidates by `get`, dated
-// by `date`; `card` is the table it sits in. `order` lists the values that
-// always get a row, even at zero; without it, every value in the data gets one.
+// What the summary tables count. Every table counts the candidates CREATED in
+// the chosen dates, so all four tables describe the same set of candidates and
+// later edits never move a candidate to another day. Each group counts them by
+// `get`; `has` limits it to candidates with that step recorded; `card` is the
+// table it sits in. `order` lists the values that always get a row, even at
+// zero; without it, every value in the data gets one.
 // `col: 1` puts a group in the card's second column.
 const GROUPS = {
   status: {
     card: 'status', title: 'candidates', get: (r) => r.progress, order: ['Fresh', 'In Progress', 'Rejected'],
-    // A Fresh candidate is dated by when it was created; any other status by
-    // when it was last updated, i.e. when it was last worked on.
-    date: (r) => (r.progress === 'Fresh' ? r.created : r.updated || r.created),
-    dateLabel: 'Status Date', dateHint: 'Fresh: created date · In Progress / Rejected: last updated date',
   },
   call: {
     card: 'call', title: 'calls', get: (r) => r.callStatus,
     // Call Status picklist in Zoho (Action After Call section), in its order.
     order: ['Not Picked', 'Contacted', 'Call Rejected', 'Call Interview Scheduled', 'Not Contacted', 'Candidate Rejected Us'],
     labels: { Contacted: 'Picked / Contacted' },
-    // Only candidates with a call recorded, dated by the Call Date (last update if that is blank).
+    // Only candidates with a call recorded.
     has: (r) => r.callStatus !== 'Not called yet',
-    date: (r) => r.callDate || r.updated || r.created, own: (r) => r.callDate, dateLabel: 'Call Date',
   },
-  // Rounds: only candidates with a result recorded for that round, dated by
-  // the round's own date (last update if that is blank).
+  // Rounds: only candidates with a result recorded for that round.
   assessment: {
     card: 'round', title: 'Assessment round',
     get: (r) => (r.assessmentResult !== 'Not recorded' ? r.assessmentResult : r.assessmentStatus),
     has: (r) => r.assessmentResult !== 'Not recorded' || r.assessmentStatus !== 'Not started',
-    date: (r) => r.assessmentDate || r.updated || r.created, own: (r) => r.assessmentDate, dateLabel: 'Assessment Date',
   },
   technical: {
     card: 'round', title: 'Technical round', get: (r) => r.technicalStatus,
     has: (r) => r.technicalStatus !== 'Not started',
-    date: (r) => r.technicalDate || r.updated || r.created, own: (r) => r.technicalDate, dateLabel: 'Technical Round Date',
   },
   hr: {
     card: 'round', col: 1, title: 'HR round', get: (r) => r.hrResult,
     has: (r) => r.hrResult !== 'Not recorded',
-    date: (r) => r.hrDate || r.updated || r.created, own: (r) => r.hrDate, dateLabel: 'HR Round Date',
   },
   final: {
     card: 'round', col: 1, title: 'CEO round', get: (r) => r.finalStatus, // Zoho's Final Status field
     has: (r) => r.finalStatus !== 'Not recorded',
-    date: (r) => r.updated || r.created,
   },
   // Final Decision section in Zoho.
   offer: {
     card: 'final', title: 'Offer stages', get: (r) => r.offerStage,
     order: ['To-be-Offered', 'Offer-Accepted', 'Offer-Declined'],
     has: (r) => r.offerStage !== 'Not recorded',
-    date: (r) => r.updated || r.created,
   },
   result: {
     card: 'final', title: 'Final result', get: (r) => r.hiringResult,
     order: ['Joined', 'Not Joined', 'Rejected'],
     has: (r) => r.hiringResult !== 'Not recorded',
-    date: (r) => r.joiningDate || r.updated || r.created, own: (r) => r.joiningDate, dateLabel: 'Date of Joining',
   },
 };
 const CARDS = ['status', 'call', 'round', 'final'];
@@ -77,13 +68,11 @@ let DATA = null;
 let period = 'today';
 const custom = { from: '', to: '' }; // used when period is 'custom'; a blank end is open
 let picked = { group: 'status', value: null }; // the summary row being listed; null = that table's total
-const table = { page: 0, sortKey: 'date', sortDir: -1 };
-
-const dateOf = (r) => GROUPS[picked.group].date(r);
+const table = { page: 0, sortKey: 'created', sortDir: -1 };
 
 function inPeriod(g) {
   const [from, to] = range();
-  return DATA.records.filter((r) => (!g.has || g.has(r)) && (!from || g.date(r) >= from) && (!to || g.date(r) <= to));
+  return DATA.records.filter((r) => (!g.has || g.has(r)) && (!from || r.created >= from) && (!to || r.created <= to));
 }
 
 // [from, to] of the chosen dates, as YYYY-MM-DD.
@@ -106,16 +95,8 @@ const COLS = [
   { key: 'name', label: 'Name', v: (r) => r.name, html: (r) => (recruitUrl(r.id) ? `<a href="${recruitUrl(r.id)}" target="_blank" rel="noopener">${esc(r.name)}</a>` : esc(r.name)) },
   { key: 'code', label: 'Candidate ID', v: (r) => r.code },
   { key: 'progress', label: 'Status', v: (r) => r.progress, html: (r) => tag(r.progress) },
-  // The date each row is counted on for the clicked table. Where that table's own
-  // Zoho date is blank, the last-updated date stands in and is shown faded.
-  {
-    key: 'date', label: () => GROUPS[picked.group].dateLabel || 'Last Updated', hint: () => GROUPS[picked.group].dateHint || '', v: dateOf,
-    html: (r) => {
-      const g = GROUPS[picked.group];
-      return g.own && !g.own(r) ? `<span class="dim" title="${esc(g.dateLabel)} is blank in Zoho · showing last updated date">${esc(dayLabel(dateOf(r)))}</span>` : esc(dayLabel(dateOf(r)));
-    },
-  },
   { key: 'created', label: 'Created', v: (r) => r.created, html: (r) => esc(dayLabel(r.created)) },
+  { key: 'callDate', label: 'Call Date', v: (r) => r.callDate, html: (r) => (r.callDate ? esc(dayLabel(r.callDate)) : tag('–')) },
   { key: 'callStatus', label: 'Call Status', v: (r) => r.callStatus, html: (r) => tag(r.callStatus, GROUPS.call.labels[r.callStatus] || r.callStatus) },
   { key: 'callRemarks', label: 'Call Remarks', v: (r) => r.callRemarks, html: (r) => (r.callRemarks ? `<span class="clip" title="${esc(r.callRemarks)}">${esc(r.callRemarks)}</span>` : tag('–')) },
   ...['assessment', 'technical', 'hr', 'final', 'offer', 'result'].map((k) => ({
@@ -146,7 +127,7 @@ function drawList(rows) {
   const slice = sorted.slice(table.page * PAGE_SIZE, (table.page + 1) * PAGE_SIZE);
   $('#list').innerHTML = `
     <div class="table-wrap"><table>
-      <thead><tr>${COLS.map((c) => `<th class="sortable" data-k="${c.key}" aria-sort="${c.key === table.sortKey ? (table.sortDir > 0 ? 'ascending' : 'descending') : 'none'}" title="${esc(c.hint?.() || '')}">${esc(typeof c.label === 'function' ? c.label() : c.label)}</th>`).join('')}</tr></thead>
+      <thead><tr>${COLS.map((c) => `<th class="sortable" data-k="${c.key}" aria-sort="${c.key === table.sortKey ? (table.sortDir > 0 ? 'ascending' : 'descending') : 'none'}">${esc(c.label)}</th>`).join('')}</tr></thead>
       <tbody>${slice.map((r) => `<tr>${COLS.map((c) => `<td>${c.html ? c.html(r) : esc(c.v(r) ?? '–')}</td>`).join('')}</tr>`).join('')
         || `<tr><td colspan="${COLS.length}" class="empty">${search ? 'No candidates match your search' : `No candidates for ${esc(periodLabel().toLowerCase())}`}</td></tr>`}</tbody>
     </table></div>
