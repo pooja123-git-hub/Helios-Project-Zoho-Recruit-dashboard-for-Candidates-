@@ -67,12 +67,13 @@ const CARDS = ['status', 'call', 'round', 'final'];
 let DATA = null;
 let period = 'today';
 const custom = { from: '', to: '' }; // used when period is 'custom'; a blank end is open
+let dept = ''; // chosen department; '' = all
 let picked = { group: 'status', value: null }; // the summary row being listed; null = that table's total
 const table = { page: 0, sortKey: 'created', sortDir: -1 };
 
 function inPeriod(g) {
   const [from, to] = range();
-  return DATA.records.filter((r) => (!g.has || g.has(r)) && (!from || r.created >= from) && (!to || r.created <= to));
+  return DATA.records.filter((r) => (!g.has || g.has(r)) && (!dept || r.department === dept) && (!from || r.created >= from) && (!to || r.created <= to));
 }
 
 // [from, to] of the chosen dates, as YYYY-MM-DD.
@@ -83,10 +84,13 @@ function range() {
 
 // "Today", "Last week", or the custom dates spelled out.
 function periodLabel() {
-  if (period !== 'custom') return PERIODS[period].label;
   const { from, to } = custom;
-  if (from && to) return from === to ? dayLabel(from) : `${dayLabel(from)} – ${dayLabel(to)}`;
-  return from ? `From ${dayLabel(from)}` : to ? `Up to ${dayLabel(to)}` : 'All dates';
+  let s = PERIODS[period].label;
+  if (period === 'custom') {
+    s = from && to ? (from === to ? dayLabel(from) : `${dayLabel(from)} – ${dayLabel(to)}`)
+      : from ? `From ${dayLabel(from)}` : to ? `Up to ${dayLabel(to)}` : 'All dates';
+  }
+  return dept ? `${s} · ${dept}` : s;
 }
 
 // ---------- candidate table ----------
@@ -220,6 +224,9 @@ async function load(quiet = false) {
     for (const r of DATA.records) {
       r._search = [r.name, r.code, r.role, r.location, r.source, r.owner, r.jobs.join(' '), r.callRemarks].filter(Boolean).join(' ').toLowerCase();
     }
+    const depts = [...new Set(DATA.records.map((r) => r.department))].sort((a, b) => a.localeCompare(b));
+    if (!depts.includes(dept)) dept = '';
+    $('#dept').innerHTML = `<option value="">All departments</option>${depts.map((d) => `<option value="${esc(d)}"${d === dept ? ' selected' : ''}>${esc(d)}</option>`).join('')}`;
     if (DATA.orgId) $('#openRecruit').href = `https://recruit.zoho.com/recruit/org${DATA.orgId}/ShowTab.do?module=Candidates`;
     // Every candidate in Zoho Recruit; hover shows when the data was last fetched.
     $('#totalPill').textContent = `Total records: ${fmt(DATA.records.length)}`;
@@ -255,6 +262,7 @@ $('#period').addEventListener('click', (e) => {
   if (!b) return;
   period = b.dataset.p; table.page = 0; render();
 });
+$('#dept').addEventListener('change', (e) => { dept = e.target.value; table.page = 0; render(); });
 for (const k of ['from', 'to']) {
   $(`#${k}Date`).addEventListener('change', (e) => { custom[k] = e.target.value; table.page = 0; render(); });
 }
