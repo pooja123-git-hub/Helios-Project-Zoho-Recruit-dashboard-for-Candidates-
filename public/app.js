@@ -208,7 +208,7 @@ function exportCsv() {
 }
 
 // ---------- data ----------
-const EXPECTED_SCHEMA = 4; // must match SCHEMA_VERSION in lib/transform.js
+const EXPECTED_SCHEMA = 5; // must match SCHEMA_VERSION in lib/transform.js
 function banner(msg) { $('#banner').hidden = !msg; $('#banner').textContent = msg || ''; }
 
 async function load(quiet = false) {
